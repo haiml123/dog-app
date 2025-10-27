@@ -1,7 +1,7 @@
 #include <NimBLEDevice.h>
 #include "ClickDetector.h"
 #include "QuietReinforcementManager.h"
-#include "BLEBarkWindow"
+#include "BLEBarkWindow.h"
 // ===== Pin Definitions =====
 const int waterPin = 13;
 const int stepPin = 33;

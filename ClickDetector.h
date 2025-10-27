@@ -11,20 +11,21 @@ typedef std::function<void()> ClickCallback;
 
 class ClickDetector {
 public:
-    // Constructor - removed longPressMs, added tripleClickMs
+    // Constructor
     ClickDetector(int rxPin = 35, int doubleClickMs = 600, int debounceMs = 50, int tripleClickMs = 900);
 
     // Setup functions
     void begin();
     void setCallbacks(ClickCallback singleClick, ClickCallback doubleClick, ClickCallback tripleClick);
 
-    // Main loop function - call this in your loop()
+    // Main loop function
     void update();
 
     // Control functions
     void reset();
     bool isLearned();
     void getStatus(String& statusMsg);
+    void getBufferStats(String& stats);
 
     // Advanced settings
     void setDoubleClickTime(int ms);
@@ -55,11 +56,12 @@ private:
 
     bool hasSignature;
 
-    // Click state - updated for triple click
+    // Click state
     unsigned long lastPress;
     unsigned long firstClickTime;
     unsigned long secondClickTime;
-    int clickCount;  // Track number of clicks (0, 1, 2, 3)
+    unsigned long lastCallbackTime;  // FIXED: Prevents RF echo
+    int clickCount;
 
     // Callbacks
     ClickCallback singleClickCallback;
