@@ -42,12 +42,13 @@ LevelConfig LEVELS[] = {
   { 2000,     1200,       P_100,        sizeof(P_100),   false }, // L0: 2s, 100%
   { 4000,     1400,       P_100,        sizeof(P_100),   false }, // L1: 4s, 100%
   { 6000,     1600,       P_80,         sizeof(P_100),    false  }, // L2: 6s, ~80%
-  { 9000,     1800,       P_50,         sizeof(P_100),    false  }, // L3: 9s, 50%
+  { 9000,     1800,       P_80,         sizeof(P_100),    false  }, // L3: 9s, 50%
+  { 12000,    2600,       P_80,         sizeof(P_100),    false  }, // L3: 9s, 50%
 };
 const uint8_t LEVEL_COUNT = sizeof(LEVELS)/sizeof(LEVELS[0]);
 
 // Manager: (namespace, levels, count, successesToAdvance, rewardCooldownMs, log, punishmentMs)
-QuietReinforcementManager quietMgr("dogNVS", LEVELS, LEVEL_COUNT, 4, 7000, true);
+QuietReinforcementManager quietMgr("dogNVS", LEVELS, LEVEL_COUNT, 4, 7000, 3, true);
 
 // ===== Button debounce state =====
 unsigned long lastWaterButtonTime = 0;
@@ -189,7 +190,21 @@ void setup() {
     []() { // double click → manual reward ONLY (does NOT affect manager)
       Serial.println("🎮 Remote Double Click → MANUAL reward");
       runFeederFor(MANUAL_REWARD_MS);
-    }
+    },
+     []() { // Long press
+          Serial.println("🎮 Remote Triple Press Click → reset");
+            quietMgr.resetState();
+            Serial.println("🔄 QuietMgr reset");
+
+            // First vibration pulse
+            digitalWrite(vibrationPin, HIGH);
+            delay(500);
+            digitalWrite(vibrationPin, LOW);
+            delay(500);
+            digitalWrite(vibrationPin, HIGH);
+            delay(500);
+            digitalWrite(vibrationPin, LOW);
+        }
   );
 
   // BLE

@@ -1,18 +1,20 @@
 #include "ClickDetector.h"
 
-ClickDetector::ClickDetector(int rxPin, int doubleClickMs, int debounceMs) {
+ClickDetector::ClickDetector(int rxPin, int doubleClickMs, int debounceMs, int tripleClickMs) {
     this->rxPin = rxPin;
     this->doubleClickMs = doubleClickMs;
     this->debounceMs = debounceMs;
+    this->tripleClickMs = tripleClickMs;
     this->rmtChannel = RMT_CHANNEL_0;
     this->minPulses = 50;
     this->maxPulses = 400;
 
     // Reset state
     hasSignature = false;
-    waitingForDouble = false;
+    clickCount = 0;
     lastPress = 0;
     firstClickTime = 0;
+    secondClickTime = 0;
     signature = {0, 0, 0, 0};
 }
 
@@ -22,9 +24,10 @@ void ClickDetector::begin() {
     Serial.println("🎮 ClickDetector initialized");
 }
 
-void ClickDetector::setCallbacks(ClickCallback singleClick, ClickCallback doubleClick) {
+void ClickDetector::setCallbacks(ClickCallback singleClick, ClickCallback doubleClick, ClickCallback tripleClick) {
     singleClickCallback = singleClick;
     doubleClickCallback = doubleClick;
+    tripleClickCallback = tripleClick;
 }
 
 void ClickDetector::setupRMT() {
@@ -114,14 +117,38 @@ void ClickDetector::handleButtonPress(int pulses) {
     }
     lastPress = now;
 
-    if (waitingForDouble) {
-        waitingForDouble = false;
-        Serial.println("👆👆 DOUBLE CLICK");
-        if (doubleClickCallback) doubleClickCallback();
-    } else {
-        waitingForDouble = true;
+    // Increment click count
+    clickCount++;
+
+    if (clickCount == 1) {
+        // First click
         firstClickTime = now;
-        Serial.println("⏳ First click (waiting for double...)");
+        Serial.println("⏳ First click (waiting for double/triple...)");
+    }
+    else if (clickCount == 2) {
+        // Second click - check if within double-click window
+        if (now - firstClickTime <= doubleClickMs) {
+            secondClickTime = now;
+            Serial.println("⏳⏳ Second click (waiting for triple...)");
+        } else {
+            // Too slow, reset to first click
+            clickCount = 1;
+            firstClickTime = now;
+            Serial.println("⏳ First click (timeout - restarted)");
+        }
+    }
+    else if (clickCount == 3) {
+        // Third click - check if within triple-click window
+        if (now - secondClickTime <= tripleClickMs) {
+            clickCount = 0;
+            Serial.println("👆👆👆 TRIPLE CLICK");
+            if (tripleClickCallback) tripleClickCallback();
+        } else {
+            // Too slow, reset to first click
+            clickCount = 1;
+            firstClickTime = now;
+            Serial.println("⏳ First click (timeout - restarted)");
+        }
     }
 }
 
@@ -134,7 +161,7 @@ void ClickDetector::processSignal() {
         if (signature.sampleCount >= 3) {
             Serial.printf("✅ Button learned! Range: %d-%d pulses (avg: %d)\n",
                          signature.minPulses, signature.maxPulses, signature.avgPulses);
-            Serial.println("🎮 Ready for single/double click detection!");
+            Serial.println("🎮 Ready for single/double/triple click detection!");
         } else {
             Serial.printf("📚 Learning... (%d/3 samples, %d pulses)\n", signature.sampleCount, pulses);
             Serial.println("   Press the SAME button again...");
@@ -151,11 +178,20 @@ void ClickDetector::processSignal() {
 }
 
 void ClickDetector::update() {
-    // Check single-click timeout
-    if (waitingForDouble && (millis() - firstClickTime >= doubleClickMs)) {
-        waitingForDouble = false;
+    unsigned long now = millis();
+
+    // Check for timeout and trigger appropriate callback
+    if (clickCount == 1 && (now - firstClickTime >= tripleClickMs)) {
+        // Only first click, no second click came - single click
+        clickCount = 0;
         Serial.println("👆 SINGLE CLICK");
         if (singleClickCallback) singleClickCallback();
+    }
+    else if (clickCount == 2 && (now - secondClickTime >= tripleClickMs)) {
+        // Two clicks, no third click came - double click
+        clickCount = 0;
+        Serial.println("👆👆 DOUBLE CLICK");
+        if (doubleClickCallback) doubleClickCallback();
     }
 
     processSignal();
@@ -164,7 +200,7 @@ void ClickDetector::update() {
 void ClickDetector::reset() {
     hasSignature = false;
     signature = {0, 0, 0, 0};
-    waitingForDouble = false;
+    clickCount = 0;
     Serial.println("🔄 ClickDetector reset");
 }
 
@@ -183,6 +219,7 @@ void ClickDetector::getStatus(String& statusMsg) {
 }
 
 void ClickDetector::setDoubleClickTime(int ms) { doubleClickMs = ms; }
+void ClickDetector::setTripleClickTime(int ms) { tripleClickMs = ms; }
 void ClickDetector::setDebounceTime(int ms) { debounceMs = ms; }
 void ClickDetector::setMinPulses(int min) { minPulses = min; }
 void ClickDetector::setMaxPulses(int max) { maxPulses = max; }

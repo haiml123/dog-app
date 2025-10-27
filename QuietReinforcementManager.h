@@ -7,7 +7,7 @@ struct LevelConfig {
   uint32_t dispenseMs;       // How long to run the feeder
   const uint8_t* pattern;    // Punch-card pattern, e.g. {1,1,1,1} for 100%
   uint8_t patternLen;        // Length of pattern
-  bool shuffleEachCycle;     // Shuffle pattern after it’s consumed? (use for VR)
+  bool shuffleEachCycle;     // Shuffle pattern after it's consumed? (use for VR)
 };
 
 class QuietReinforcementManager {
@@ -17,16 +17,27 @@ public:
                             uint8_t levelCount,
                             uint8_t successesToAdvance = 4,
                             uint32_t minDispenseCooldownMs = 7000,
+                            uint8_t levelsToDemoteOnBark = 0,
                             bool enableLog = false)
   : _ns(nvsNamespace),
     _levels(levels),
     _levelCount(levelCount),
     _needSuccesses(successesToAdvance),
     _cooldownMs(minDispenseCooldownMs),
-    _logEnabled(enableLog) {}
+    _logEnabled(enableLog),
+    _demotionLevels(levelsToDemoteOnBark) {}  // NEW
 
   // Enable/disable logs dynamically
   void setLogging(bool enabled) { _logEnabled = enabled; }
+
+  // NEW: Set how many levels to drop on bark (0 = no demotion)
+  void setDemotionLevels(uint8_t levels) {
+    _demotionLevels = levels;
+    _log("Demotion levels set to: " + String(_demotionLevels));
+  }
+
+  // NEW: Get current demotion setting
+  uint8_t getDemotionLevels() const { return _demotionLevels; }
 
   // Call at boot
   void begin() {
@@ -47,17 +58,41 @@ public:
     uint32_t seed = esp_random();
     randomSeed(seed);
 
-    _log("Initialized. Level=" + String(_currentLevel));
+    _log("Initialized. Level=" + String(_currentLevel) + ", Demotion=" + String(_demotionLevels));
   }
 
-  // Call when bark/noise is detected
+  // Call when bark/noise is detected - NOW WITH DEMOTION
   void onBark(uint32_t nowMs) {
     _lastBarkMs = nowMs;
     _successesAtLevel = 0;
     _quietStartMs = nowMs;
     _pendingDispenseMs = 0;
+
+    // NEW: Apply level demotion if configured
+    if (_demotionLevels > 0 && _currentLevel > 0) {
+      uint8_t oldLevel = _currentLevel;
+
+      // Drop levels, but never go below 0
+      if (_currentLevel >= _demotionLevels) {
+        _currentLevel -= _demotionLevels;
+      } else {
+        _currentLevel = 0;
+      }
+
+      // Reset pattern index when level changes
+      _patternIndex = 0;
+
+      if (oldLevel != _currentLevel) {
+        _log("Bark detected. DEMOTED: Level " + String(oldLevel) +
+             " → Level " + String(_currentLevel) + " (-" + String(oldLevel - _currentLevel) + ")");
+      } else {
+        _log("Bark detected. Reset quiet timer, level=" + String(_currentLevel));
+      }
+    } else {
+      _log("Bark detected. Reset quiet timer, level=" + String(_currentLevel));
+    }
+
     _saveThrottled(nowMs);
-    _log("Bark detected. Reset quiet timer, level=" + String(_currentLevel));
   }
 
   // Call frequently from loop(); returns true if it just decided a dispense
@@ -125,7 +160,7 @@ public:
     _pendingDispenseMs = 0;
     _lastSaveMs = 0;
 
-    // Reset persisted values only (don’t clear namespace)
+    // Reset persisted values only (don't clear namespace)
     _prefs.putUChar("lvl", 0);
     _prefs.putUChar("succ", 0);
     _prefs.putUChar("pidx", 0);
@@ -196,6 +231,7 @@ private:
 
   uint8_t  _needSuccesses{4};
   uint32_t _cooldownMs{7000};
+  uint8_t  _demotionLevels{0};  // NEW: How many levels to drop on bark
 
   bool _logEnabled{false};
 };

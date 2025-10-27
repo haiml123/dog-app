@@ -11,12 +11,12 @@ typedef std::function<void()> ClickCallback;
 
 class ClickDetector {
 public:
-    // Constructor
-    ClickDetector(int rxPin = 35, int doubleClickMs = 600, int debounceMs = 50);
+    // Constructor - removed longPressMs, added tripleClickMs
+    ClickDetector(int rxPin = 35, int doubleClickMs = 600, int debounceMs = 50, int tripleClickMs = 900);
 
     // Setup functions
     void begin();
-    void setCallbacks(ClickCallback singleClick, ClickCallback doubleClick);
+    void setCallbacks(ClickCallback singleClick, ClickCallback doubleClick, ClickCallback tripleClick);
 
     // Main loop function - call this in your loop()
     void update();
@@ -28,6 +28,7 @@ public:
 
     // Advanced settings
     void setDoubleClickTime(int ms);
+    void setTripleClickTime(int ms);
     void setDebounceTime(int ms);
     void setMinPulses(int min);
     void setMaxPulses(int max);
@@ -39,6 +40,7 @@ private:
 
     // Timing config
     int doubleClickMs;
+    int tripleClickMs;
     int debounceMs;
     int minPulses;
     int maxPulses;
@@ -53,14 +55,16 @@ private:
 
     bool hasSignature;
 
-    // Click state
+    // Click state - updated for triple click
     unsigned long lastPress;
     unsigned long firstClickTime;
-    bool waitingForDouble;
+    unsigned long secondClickTime;
+    int clickCount;  // Track number of clicks (0, 1, 2, 3)
 
     // Callbacks
     ClickCallback singleClickCallback;
     ClickCallback doubleClickCallback;
+    ClickCallback tripleClickCallback;
 
     // Internal functions
     void setupRMT();
