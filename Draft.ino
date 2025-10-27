@@ -1,7 +1,7 @@
 #include <NimBLEDevice.h>
 #include "ClickDetector.h"
 #include "QuietReinforcementManager.h"
-
+#include "BLEBarkWindow"
 // ===== Pin Definitions =====
 const int waterPin = 13;
 const int stepPin = 33;
@@ -30,6 +30,7 @@ const int rfRemotePin = 35;
 // ===== Manual action durations (do NOT affect manager) =====
 #define MANUAL_PUNISH_MS        2000
 #define MANUAL_REWARD_MS        1200
+#define BARK_WINDOW             5000
 
 // ===== REINFORCEMENT LEVELS (manager-driven rewards) =====
 // Patterns: 1=reward, 0=skip
@@ -49,6 +50,8 @@ const uint8_t LEVEL_COUNT = sizeof(LEVELS)/sizeof(LEVELS[0]);
 
 // Manager: (namespace, levels, count, successesToAdvance, rewardCooldownMs, log, punishmentMs)
 QuietReinforcementManager quietMgr("dogNVS", LEVELS, LEVEL_COUNT, 4, 7000, 3, true);
+
+BLEBarkWindow bleBarkWindow(BARK_WINDOW);  // 5 second window
 
 // ===== Button debounce state =====
 unsigned long lastWaterButtonTime = 0;
@@ -135,9 +138,16 @@ class MyAdvertisedDeviceCallbacks : public NimBLEAdvertisedDeviceCallbacks {
     if (deviceName == ADV_NAME) {
       std::string mfgData = d->getManufacturerData();
       if (mfgData.find(ADV_TAG) != std::string::npos) {
-        quietMgr.onBark(millis());  // enqueue punishment + reset quiet window
-        startPunishment(MANUAL_PUNISH_MS);
-        Serial.printf("📱 BLE Bark Detected. RSSI: %d dBm\n", d->getRSSI());
+
+        uint32_t now = millis();
+
+        // Check window before punishing
+        if (bleBarkWindow.shouldPunish(now)) {
+          quietMgr.onBark(now);  // enqueue punishment + reset quiet window
+          startPunishment(MANUAL_PUNISH_MS);
+          Serial.printf("📱 BLE Bark Detected. RSSI: %d dBm\n", d->getRSSI());
+        }
+        // If shouldPunish returns false, bark is logged but ignored
       }
     }
   }
